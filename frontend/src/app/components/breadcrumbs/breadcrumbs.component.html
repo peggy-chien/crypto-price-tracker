@@ -1,0 +1,14 @@
+<nav class="text-sm text-gray-500 py-4 px-6 dark:text-white">
+  <ol class="list-reset flex">
+    @for (item of items; track item.label) {
+      <li>
+        @if (item.link) {
+          <a [routerLink]="item.link" class="hover:underline">{{ item.label }}</a>
+          <span class="mx-2">›</span>
+        } @else {
+          <span class="font-semibold text-gray-700 dark:text-gray-400">{{ item.label }}</span>
+        }
+      </li>
+    }
+  </ol>
+</nav>

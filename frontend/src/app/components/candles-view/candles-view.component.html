@@ -1,0 +1,30 @@
+<div class="flex items-center mb-4 px-6">
+  <span class="text-2xl font-bold dark:text-white">{{ symbol }}</span>
+</div>
+<div class="bg-white rounded shadow p-6 mb-6">
+  <div class="flex flex-col gap-4">
+    <div class="flex items-center justify-between">
+      <div class="text-3xl font-bold" [ngClass]="priceColor">
+        ${{ price !== null ? (price | number:'1.2-2') : '--' }}
+        @if (change !== null) {
+          <span [ngClass]="changePercentageColor" class="ml-2 text-xl font-semibold">
+            {{ change > 0 ? '+' : '' }}{{ change | number:'1.2-2' }}%
+          </span>
+        }
+      </div>
+      <div class="text-sm text-gray-500">
+        <span class="ml-2 flex space-x-2">
+          @for (interval of intervals; track interval.value) {
+            <button type="button"
+              (click)="onIntervalChange(interval.value)"
+              [ngClass]="interval.value === selectedInterval() ? 'bg-gray-200 text-gray-900 rounded px-2 py-1' : 'hover:bg-gray-100 rounded px-2 py-1'">
+              {{ interval.label }}
+            </button>
+          }
+        </span>
+      </div>
+    </div>
+
+    <div #chartContainer class="w-full h-[400px]"></div>
+  </div>
+</div>

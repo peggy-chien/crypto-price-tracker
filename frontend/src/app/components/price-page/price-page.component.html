@@ -1,0 +1,13 @@
+<app-breadcrumbs [items]="[
+  { label: 'All Prices', link: '/' },
+  { label: symbol + ' Price' }
+]"></app-breadcrumbs>
+
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+  <div class="md:col-span-2">
+    <app-candles-view [symbol]="symbol"></app-candles-view>
+  </div>
+  <div>
+    <app-order-book [symbol]="symbol"></app-order-book>
+  </div>
+</div>
