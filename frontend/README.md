@@ -1,6 +1,36 @@
 # CryptoPriceTracker
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 19.2.11.
+This project is a real-time cryptocurrency price tracker built with Angular 19. It features a modern, responsive UI and leverages the latest Angular features, including signals and standalone components.
+
+## Main Features
+
+- **Real-time Trading Pairs Grid:**
+  - Displays a grid of popular trading pairs with live price and percent change, color-coded by price movement.
+  - Click a pair to view detailed price and order book information.
+
+- **Price Page with Candlestick Chart:**
+  - Interactive candlestick chart for each trading pair, powered by [TradingView Lightweight Charts](https://github.com/tradingview/lightweight-charts).
+  - User-selectable intervals: 1m, 30m, 1h, 1d.
+  - Lazy loading of historical candles as you scroll left (infinite scroll).
+  - Real-time updates via WebSocket for the latest candle.
+  - Custom time axis formatting for clear multi-day navigation.
+
+- **Order Book (placeholder):**
+  - UI ready for future order book integration.
+
+- **Modern Angular Architecture:**
+  - Uses Angular 19 standalone components, signals, and best practices for state management and reactivity.
+  - Clean separation of frontend and backend (future-ready for full-stack expansion).
+
+## Data Source
+
+All price and candlestick data is sourced from the official [Binance public APIs](https://github.com/binance/binance-spot-api-docs):
+- [Binance REST API](https://github.com/binance/binance-spot-api-docs/blob/master/rest-api.md) for historical candles
+- [Binance WebSocket Streams](https://github.com/binance/binance-spot-api-docs/blob/master/web-socket-streams.md) for real-time price and kline updates
+
+## Chart Library
+
+- [TradingView Lightweight Charts](https://github.com/tradingview/lightweight-charts) is used for fast, interactive, and beautiful candlestick chart rendering.
 
 ## Development server
 
