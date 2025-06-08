@@ -23,7 +23,7 @@ jobs:
         working-directory: frontend
 
       - name: Build Angular project
-        run: pnpm run build
+        run: pnpm run build:prod
         working-directory: frontend
 
       - name: Configure Git user
