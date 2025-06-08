@@ -1,6 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { HttpClientModule } from '@angular/common/http';
 import { CandlesViewComponent } from '../candles-view/candles-view.component';
 import { OrderBookComponent } from '../order-book/order-book.component';
 import { ActivatedRoute } from '@angular/router';
@@ -9,7 +8,7 @@ import { BreadcrumbsComponent } from '../breadcrumbs/breadcrumbs.component';
 @Component({
   selector: 'app-price-page',
   standalone: true,
-  imports: [CommonModule, HttpClientModule, CandlesViewComponent, OrderBookComponent, BreadcrumbsComponent],
+  imports: [CommonModule, CandlesViewComponent, OrderBookComponent, BreadcrumbsComponent],
   templateUrl: './price-page.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush
 })

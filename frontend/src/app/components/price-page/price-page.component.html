@@ -3,6 +3,10 @@
   { label: symbol + ' Price' }
 ]"></app-breadcrumbs>
 
+<div class="flex items-center mb-4 px-6">
+  <span class="text-2xl font-bold dark:text-white">{{ symbol }}</span>
+</div>
+
 <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
   <div class="md:col-span-2">
     <app-candles-view [symbol]="symbol"></app-candles-view>

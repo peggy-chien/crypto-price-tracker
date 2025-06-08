@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, OnInit, OnDestroy } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, OnInit, OnDestroy, signal, Signal } from '@angular/core';
 import { TradingPairComponent } from '../trading-pair/trading-pair.component';
 import { CommonModule } from '@angular/common';
 import { BinanceWebsocketService } from '../../services/binance-websocket.service';
@@ -12,16 +12,17 @@ import { Router } from '@angular/router';
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class TradingPairPageComponent implements OnInit, OnDestroy {
-  tradingPairs = inject(BinanceWebsocketService).tradingPairs;
   private binanceWs = inject(BinanceWebsocketService);
   private router = inject(Router);
+  tradingPairs: Signal<any[]> = signal([]);
+  private readonly pairs = ['btcusdt', 'ethusdt', 'solusdt', 'dogeusdt', 'bnbusdt', 'adausdt'];
 
   ngOnInit() {
-    this.binanceWs.subscribeToPairs(['btcusdt', 'ethusdt', 'solusdt', 'dogeusdt', 'bnbusdt', 'adausdt']);
+    this.tradingPairs = this.binanceWs.subscribeToTickers(this.pairs);
   }
 
   ngOnDestroy() {
-    this.binanceWs.close();
+    this.binanceWs.unsubscribeFromTickers();
   }
 
   onSelect(symbol: string) {
