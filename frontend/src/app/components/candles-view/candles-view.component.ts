@@ -7,6 +7,8 @@ import { TradingPairTicker } from '../../models/trading-pair-ticker.model';
 import { CandleInterval } from '../../models/candle-interval.type';
 import { BehaviorSubject, combineLatest, switchMap, catchError, of } from 'rxjs';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { Subject } from 'rxjs';
+import { debounceTime, concatMap } from 'rxjs/operators';
 
 @Component({
   selector: 'app-candles-view',
@@ -27,7 +29,6 @@ export class CandlesViewComponent implements AfterViewInit, OnDestroy {
   earliestCandleTime: number = 0;
   loadingMore = false;
   error = signal<string | null>(null);
-  noMoreHistory = false;
   private chart: IChartApi | undefined;
   private candleSeries: any;
   private candlesService = inject(CandlesService);
@@ -239,41 +240,55 @@ export class CandlesViewComponent implements AfterViewInit, OnDestroy {
 
   private setupLazyLoading() {
     if (!this.chart) return;
-  
-    let lastFetchedFrom: number | null = null;
-  
-    const onVisibleLogicalRangeChanged: LogicalRangeChangeEventHandler = (newVisibleLogicalRange) => {
-      const barsInfo: BarsInfo<number> = this.candleSeries.barsInLogicalRange(newVisibleLogicalRange);
-  
-      if (barsInfo !== null && barsInfo.barsBefore < 50) {
-        const fromTimestamp = barsInfo.from ? barsInfo.from * 1000 : undefined;
-  
-        if (fromTimestamp && fromTimestamp !== lastFetchedFrom) {
-          console.log('[LazyLoad] Fetching historical candles from:', fromTimestamp);
-          lastFetchedFrom = fromTimestamp;
-  
-          this.candlesService
-            .fetchHistoricalCandles(this.symbol, this.selectedInterval(), fromTimestamp)
-            .subscribe((newCandles) => {
-              if (newCandles && newCandles.length > 0) {
-                const currentData = this.candleSeries.data();
-  
-                // Merge & remove duplicates based on `time`
-                const mergedMap = new Map<number, typeof newCandles[0]>();
-                [...newCandles, ...currentData].forEach(candle => {
-                  mergedMap.set(candle.time, candle); // later ones override earlier
-                });
-  
-                const merged = Array.from(mergedMap.values())
-                  .sort((a, b) => Number(a.time) - Number(b.time)); // strictly ascending
-  
-                this.candleSeries.setData(merged);
-              }
+
+    let loadingMore = false;
+    let earliestLoadedTime: number | null = null;
+
+    const fetchRequest$ = new Subject<{ endTime: number | undefined }>();
+
+    fetchRequest$
+      .pipe(
+        debounceTime(200),
+        concatMap(({ endTime: requestedEndTime }: { endTime: number | undefined }) => {
+          loadingMore = true;
+          return this.candlesService.fetchHistoricalCandles(this.symbol, this.selectedInterval(), requestedEndTime);
+        })
+      )
+      .subscribe({
+        next: (newCandles: any[]) => {
+          loadingMore = false;
+          if (newCandles && newCandles.length > 0) {
+            const currentData = this.candleSeries.data();
+            const mergedMap = new Map<number, typeof newCandles[0]>();
+            [...newCandles, ...currentData].forEach(candle => {
+              mergedMap.set(Number(candle.time), candle);
             });
+            const merged = Array.from(mergedMap.values())
+              .sort((a, b) => Number(a.time) - Number(b.time));
+            this.candleSeries.setData(merged);
+            if (merged.length > 0) {
+              earliestLoadedTime = Number(merged[0].time) * 1000;
+            }
+          }
+        },
+        error: () => {
+          loadingMore = false;
+        }
+      });
+
+    const onVisibleLogicalRangeChanged: LogicalRangeChangeEventHandler = (newVisibleLogicalRange) => {
+      if (!this.candleSeries || loadingMore) return;
+      const barsInfo: BarsInfo<number> = this.candleSeries.barsInLogicalRange(newVisibleLogicalRange);
+
+      if (barsInfo !== null && barsInfo.barsBefore < 50) {
+        const currentData = this.candleSeries.data();
+        const earliest = currentData.length > 0 ? Number(currentData[0].time) * 1000 : undefined;
+        if (earliest && !loadingMore) {
+          fetchRequest$.next({ endTime: earliest - 1 });
         }
       }
     };
-  
+
     this.chart.timeScale().subscribeVisibleLogicalRangeChange(onVisibleLogicalRangeChanged);
   }
 }

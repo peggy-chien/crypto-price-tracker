@@ -42,6 +42,8 @@ export class CandlesService {
    * Subscribe to live kline updates for a symbol and interval.
    * Returns a Signal<CandlestickData|null> that updates with each new candle.
    * Cleans up previous connection for the same symbol/interval.
+   * @param symbol Trading pair symbol (e.g., BTCUSDT)
+   * @param interval Kline interval (e.g., '1m', '1h')
    */
   subscribeToLiveKlines(symbol: string, interval: CandleInterval = CandleInterval.OneMinute): Signal<CandlestickData | null> {
     const key = `${symbol.toLowerCase()}_${interval}`;
