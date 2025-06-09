@@ -1,4 +1,4 @@
-import { Injectable, ElementRef, OnDestroy } from '@angular/core';
+import { Injectable, ElementRef, OnDestroy, inject } from '@angular/core';
 import { 
   createChart, 
   IChartApi, 
@@ -7,11 +7,9 @@ import {
   ColorType, 
   CandlestickSeries, 
   CandlestickData, 
-  IRange, 
-  BarsInfo, 
+  IRange,
   LogicalRangeChangeEventHandler,
-  ISeriesApi,
-  Time
+  ISeriesApi
 } from 'lightweight-charts';
 import { CandleInterval } from '../models/candle-interval.type';
 import { Subject, Subscription } from 'rxjs';
@@ -40,6 +38,7 @@ const DEFAULT_CONFIG: ChartConfig = {
 
 @Injectable({ providedIn: 'root' })
 export class ChartService implements OnDestroy {
+  private candlesService = inject(CandlesService);
   private chart: IChartApi | undefined;
   private candleSeries: ISeriesApi<"Candlestick"> | undefined;
   private loadingMore = false;
@@ -47,8 +46,10 @@ export class ChartService implements OnDestroy {
   private fetchRequest$ = new Subject<{ endTime: number | undefined }>();
   private config: ChartConfig = DEFAULT_CONFIG;
 
-  constructor(private candlesService: CandlesService) {}
-
+  /**
+   * Set the chart configuration.
+   * @param config Partial<ChartConfig>
+   */
   setConfig(config: Partial<ChartConfig>) {
     this.config = { ...DEFAULT_CONFIG, ...config };
     if (this.chart) {
@@ -70,6 +71,11 @@ export class ChartService implements OnDestroy {
     }
   }
 
+  /**
+   * Initialize the chart.
+   * @param container ElementRef
+   * @param interval CandleInterval
+   */
   initChart(container: ElementRef, interval: CandleInterval) {
     try {
       const chartOptions: DeepPartial<TimeChartOptions> = {
@@ -105,6 +111,11 @@ export class ChartService implements OnDestroy {
     }
   }
 
+  /**
+   * Setup lazy loading for the chart.
+   * @param symbol Trading pair symbol (e.g., BTCUSDT)
+   * @param interval CandleInterval
+   */
   setupLazyLoading(symbol: string, interval: CandleInterval) {
     if (!this.chart || !this.candleSeries) {
       console.warn('[ChartService] Chart not initialized');
@@ -116,7 +127,7 @@ export class ChartService implements OnDestroy {
 
     const subscription = this.fetchRequest$
       .pipe(
-        debounceTime(200),
+        debounceTime(100),
         concatMap(({ endTime: requestedEndTime }: { endTime: number | undefined }) => {
           this.loadingMore = true;
           return this.candlesService.fetchHistoricalCandles(symbol, interval, requestedEndTime)
@@ -170,6 +181,10 @@ export class ChartService implements OnDestroy {
     this.chart.timeScale().subscribeVisibleLogicalRangeChange(onVisibleLogicalRangeChanged);
   }
 
+  /**
+   * Update a single candle.
+   * @param candle CandlestickData
+   */
   updateCandle(candle: CandlestickData) {
     if (!this.candleSeries) {
       console.warn('[ChartService] Chart not initialized');
@@ -182,6 +197,10 @@ export class ChartService implements OnDestroy {
     }
   }
 
+  /**
+   * Set the chart data.
+   * @param data CandlestickData[]
+   */
   setData(data: CandlestickData[]) {
     if (!this.candleSeries) {
       console.warn('[ChartService] Chart not initialized');
@@ -199,6 +218,9 @@ export class ChartService implements OnDestroy {
     this.subscriptions = [];
   }
 
+  /**
+   * Reset the chart.
+   */
   reset() {
     this.cleanupSubscriptions();
     if (this.chart) {

@@ -1,8 +1,23 @@
 import { Injectable, signal, Signal } from '@angular/core';
+import { webSocket, WebSocketSubject } from 'rxjs/webSocket';
+import { Subject, timer } from 'rxjs';
+import { retry, takeUntil } from 'rxjs/operators';
 import { TradingPairTicker } from '../models/trading-pair-ticker.model';
 
+interface BinanceTickerMessage {
+  s: string;  // symbol
+  c: string;  // current price
+  P: string;  // price change percent
+}
+
+interface BinanceMultiTickerMessage {
+  stream: string;
+  data: BinanceTickerMessage;
+}
+
 interface TickerStream {
-  ws: WebSocket;
+  ws: WebSocketSubject<BinanceTickerMessage>;
+  destroy$: Subject<void>;
   signal: Signal<TradingPairTicker | null>;
 }
 
@@ -11,84 +26,123 @@ export class BinanceWebsocketService {
   // Map of symbol to TickerStream (per-symbol)
   private streams = new Map<string, TickerStream>();
   // Multi-ticker stream for grid
-  private multiWs: WebSocket | null = null;
+  private multiWs: WebSocketSubject<BinanceMultiTickerMessage> | null = null;
   private multiSignal = signal<TradingPairTicker[]>([]);
+  private multiDestroy$ = new Subject<void>();
   private multiPairs: string[] = [];
+  private readonly RECONNECT_INTERVAL = 5000;
 
   /**
    * Subscribe to live ticker updates for a symbol (per-symbol).
+   * @param symbol Trading pair symbol (e.g., BTCUSDT)
    */
   subscribeToTicker(symbol: string): Signal<TradingPairTicker | null> {
     const key = symbol.toUpperCase();
     this.unsubscribeFromTicker(symbol);
+    
     const tickerSignal = signal<TradingPairTicker | null>(null);
-    const ws = new WebSocket(`wss://stream.binance.com:9443/ws/${symbol.toLowerCase()}@ticker`);
-    ws.onmessage = (event) => {
-      try {
-        const t = JSON.parse(event.data);
-        const ticker: TradingPairTicker = {
-          symbol: t.s,
-          price: parseFloat(t.c),
-          change: parseFloat(t.P)
-        };
-        tickerSignal.set(ticker);
-      } catch (err) {
-        console.error('[BinanceWebsocketService] WebSocket message error:', err);
+    const destroy$ = new Subject<void>();
+    
+    const ws = webSocket<BinanceTickerMessage>({
+      url: `wss://stream.binance.com:9443/ws/${symbol.toLowerCase()}@ticker`,
+      openObserver: {
+        next: () => console.log('[BinanceWebsocketService] WebSocket connected')
       }
-    };
-    ws.onerror = (err) => {
-      console.error('[BinanceWebsocketService] WebSocket error:', err);
-    };
-    ws.onclose = () => {};
-    this.streams.set(key, { ws, signal: tickerSignal });
+    });
+
+    ws.pipe(
+      retry({
+        delay: () => timer(this.RECONNECT_INTERVAL),
+        resetOnSuccess: true
+      }),
+      takeUntil(destroy$)
+    ).subscribe({
+      next: (msg) => {
+        try {
+          const ticker: TradingPairTicker = {
+            symbol: msg.s,
+            price: parseFloat(msg.c),
+            change: parseFloat(msg.P)
+          };
+          tickerSignal.set(ticker);
+        } catch (err) {
+          console.error('[BinanceWebsocketService] Message processing error:', err);
+        }
+      },
+      error: (err) => {
+        console.error('[BinanceWebsocketService] WebSocket error:', err);
+      },
+      complete: () => {
+        console.log('[BinanceWebsocketService] WebSocket connection closed');
+      }
+    });
+
+    this.streams.set(key, { ws, destroy$, signal: tickerSignal });
     return tickerSignal;
   }
 
   /**
    * Subscribe to live ticker updates for multiple pairs (for grid).
    * Returns a signal<TradingPairTicker[]>.
+   * @param pairs Array of trading pair symbols (e.g., ['BTCUSDT', 'ETHUSDT'])
    */
   subscribeToTickers(pairs: string[]): Signal<TradingPairTicker[]> {
     this.unsubscribeFromTickers();
     this.multiPairs = pairs;
     const streams = pairs.map(pair => `${pair.toLowerCase()}@ticker`).join('/');
-    this.multiWs = new WebSocket(`wss://stream.binance.com:9443/stream?streams=${streams}`);
-    const tickerMap: Record<string, TradingPairTicker> = {};
-    this.multiWs.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data && data.data && data.stream) {
-          const t = data.data;
-          const ticker: TradingPairTicker = {
-            symbol: t.s,
-            price: parseFloat(t.c),
-            change: parseFloat(t.P)
-          };
-          tickerMap[t.s] = ticker;
-          this.multiSignal.set(Object.values(tickerMap));
-        }
-      } catch (err) {
-        console.error('[BinanceWebsocketService] Multi-ticker WebSocket message error:', err);
+    
+    this.multiWs = webSocket<BinanceMultiTickerMessage>({
+      url: `wss://stream.binance.com:9443/stream?streams=${streams}`,
+      openObserver: {
+        next: () => console.log('[BinanceWebsocketService] Multi-ticker WebSocket connected')
       }
-    };
-    this.multiWs.onerror = (err) => {
-      console.error('[BinanceWebsocketService] Multi-ticker WebSocket error:', err);
-    };
-    this.multiWs.onclose = () => {};
+    });
+
+    const tickerMap: Record<string, TradingPairTicker> = {};
+    
+    this.multiWs.pipe(
+      retry({
+        delay: () => timer(this.RECONNECT_INTERVAL),
+        resetOnSuccess: true
+      }),
+      takeUntil(this.multiDestroy$)
+    ).subscribe({
+      next: (msg) => {
+        try {
+          if (msg.data) {
+            const ticker: TradingPairTicker = {
+              symbol: msg.data.s,
+              price: parseFloat(msg.data.c),
+              change: parseFloat(msg.data.P)
+            };
+            tickerMap[ticker.symbol] = ticker;
+            this.multiSignal.set(Object.values(tickerMap));
+          }
+        } catch (err) {
+          console.error('[BinanceWebsocketService] Multi-ticker message processing error:', err);
+        }
+      },
+      error: (err) => {
+        console.error('[BinanceWebsocketService] Multi-ticker WebSocket error:', err);
+      },
+      complete: () => {
+        console.log('[BinanceWebsocketService] Multi-ticker WebSocket connection closed');
+      }
+    });
+
     return this.multiSignal;
   }
 
   /**
    * Unsubscribe and clean up live ticker WebSocket for a symbol.
    */
-  unsubscribeFromTicker(symbol: string) {
+  unsubscribeFromTicker(symbol: string): void {
     const key = symbol.toUpperCase();
     const stream = this.streams.get(key);
     if (stream) {
-      stream.ws.onmessage = null;
-      stream.ws.onerror = null;
-      stream.ws.onclose = null;
-      stream.ws.close();
+      stream.destroy$.next();
+      stream.destroy$.complete();
+      stream.ws.complete();
       this.streams.delete(key);
     }
   }
@@ -96,12 +150,11 @@ export class BinanceWebsocketService {
   /**
    * Unsubscribe and clean up multi-ticker WebSocket.
    */
-  unsubscribeFromTickers() {
+  unsubscribeFromTickers(): void {
     if (this.multiWs) {
-      this.multiWs.onmessage = null;
-      this.multiWs.onerror = null;
-      this.multiWs.onclose = null;
-      this.multiWs.close();
+      this.multiDestroy$.next();
+      this.multiDestroy$.complete();
+      this.multiWs.complete();
       this.multiWs = null;
       this.multiSignal.set([]);
       this.multiPairs = [];
@@ -111,12 +164,11 @@ export class BinanceWebsocketService {
   /**
    * Clean up all WebSocket connections.
    */
-  closeAll() {
+  closeAll(): void {
     for (const [key, stream] of this.streams.entries()) {
-      stream.ws.onmessage = null;
-      stream.ws.onerror = null;
-      stream.ws.onclose = null;
-      stream.ws.close();
+      stream.destroy$.next();
+      stream.destroy$.complete();
+      stream.ws.complete();
       this.streams.delete(key);
     }
     this.unsubscribeFromTickers();
