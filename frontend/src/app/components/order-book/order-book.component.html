@@ -1,5 +1,100 @@
-<div class="bg-white rounded shadow p-4">
-  <h3 class="text-lg font-semibold mb-2">Order Book ({{ symbol }})</h3>
-  <!-- TODO: Implement order book table -->
-  <div class="text-gray-400">Order book will appear here.</div>
+<div class="bg-[#1a1a1a] rounded-lg p-4 text-white font-sans">
+  <div class="mb-4 flex justify-between">
+    <h3 class="text-lg font-medium m-0">Order Book</h3>
+  </div>
+  <ng-container *ngIf="orderBook$ | async as orderBook">
+    <!-- Horizontal layout: bids and asks side by side, only price and quantity, price centered -->
+     @if (layout === 'horizontal') {
+      <div class="flex flex-row gap-2 w-full">
+        <!-- Bids (left) -->
+        <div class="flex-1">
+          <div class="grid grid-cols-1 text-gray-400 font-medium text-xs border-b border-gray-700 pb-1">
+            <span>Bid</span>
+          </div>
+          <div class="overflow-y-auto" style="max-height: 280px;">
+            <ng-container *ngFor="let row of processSide(orderBook.bids, levels)">
+              <div class="relative grid grid-cols-2 text-xs font-mono h-7 items-center">
+                <span class="z-10">{{row.quantity | number:'1.6-6'}}</span>
+                <span class="z-10 text-green-400 text-right">{{row.price | number:'1.2-2'}}</span>
+                <div class="absolute left-0 top-0 h-full bg-green-200/20 rounded transition-all duration-100"
+                     [style.width.%]="100 * row.quantity / getMaxQuantity(processSide(orderBook.bids, levels))"></div>
+              </div>
+            </ng-container>
+          </div>
+        </div>
+        <!-- Asks (right) -->
+        <div class="flex-1">
+          <div class="grid grid-cols-1 text-gray-400 font-medium text-xs border-b border-gray-700 pb-1">
+            <span >Ask</span>
+          </div>
+          <div class="overflow-y-auto" style="max-height: 280px;">
+            <ng-container *ngFor="let row of processSide(orderBook.asks, levels)">
+              <div class="relative grid grid-cols-2 text-xs font-mono h-7 items-center">
+                <span class="z-10 text-red-400">{{row.price | number:'1.2-2'}}</span>
+                <span class="z-10 text-right">{{row.quantity | number:'1.6-6'}}</span>
+                <div class="absolute left-0 top-0 h-full bg-red-200/20 rounded transition-all duration-100"
+                     [style.width.%]="100 * row.quantity / getMaxQuantity(processSide(orderBook.asks, levels))"></div>
+              </div>
+            </ng-container>
+          </div>
+        </div>
+      </div>
+    } @else {
+    <!-- Vertical layout: asks on top, spread, bids on bottom, all columns -->
+      <div class="flex flex-col gap-4">
+        <!-- Asks (Sell Orders) -->
+        <div>
+          <h4 class="text-base font-semibold mb-2 text-red-400">Sell Orders</h4>
+          <div class="grid grid-cols-4 text-gray-400 font-medium text-xs border-b border-gray-700 pb-1">
+            <span>Price</span>
+            <span>Amount</span>
+            <span>Total</span>
+            <span>Sum</span>
+          </div>
+          <div class="overflow-y-auto" style="max-height: 280px;">
+            <ng-container *ngFor="let row of processSide(orderBook.asks, levels); let i = index">
+              <div class="relative grid grid-cols-4 text-xs font-mono h-7 items-center"
+                   [ngClass]="i % 2 === 0 ? 'bg-red-50/5' : ''">
+                <div class="z-10 text-red-400">{{row.price | number:'1.2-2'}}</div>
+                <div class="z-10">{{row.quantity | number:'1.6-6'}}</div>
+                <div class="z-10">{{row.total | number:'1.2-2'}}</div>
+                <div class="z-10">{{row.sum | number:'1.2-2'}}</div>
+                <div class="absolute left-0 top-0 h-full bg-red-200/20 rounded transition-all duration-100"
+                     [style.width.%]="100 * row.sum / getMaxSum(processSide(orderBook.asks, levels))"></div>
+              </div>
+            </ng-container>
+          </div>
+        </div>
+        <!-- Spread Indicator -->
+        <div *ngIf="getSpread(orderBook) !== null" class="my-2">
+          <div class="bg-gray-800 text-white text-xs rounded px-3 py-1 border border-gray-700 shadow text-center">
+            Spread: <span class="font-mono">{{getSpread(orderBook) | number:'1.2-8'}}</span>
+          </div>
+        </div>
+        <!-- Bids (Buy Orders) -->
+        <div>
+          <h4 class="text-base font-semibold mb-2 text-green-400">Buy Orders</h4>
+          <div class="grid grid-cols-4 text-gray-400 font-medium text-xs border-b border-gray-700 pb-1">
+            <span>Price</span>
+            <span>Amount</span>
+            <span>Total</span>
+            <span>Sum</span>
+          </div>
+          <div class="overflow-y-auto" style="max-height: 280px;">
+            <ng-container *ngFor="let row of processSide(orderBook.bids, levels); let i = index">
+              <div class="relative grid grid-cols-4 text-xs font-mono h-7 items-center"
+                   [ngClass]="i % 2 === 0 ? 'bg-green-50/5' : ''">
+                <div class="z-10 text-green-400">{{row.price | number:'1.2-2'}}</div>
+                <div class="z-10">{{row.quantity | number:'1.6-6'}}</div>
+                <div class="z-10">{{row.total | number:'1.2-2'}}</div>
+                <div class="z-10">{{row.sum | number:'1.2-2'}}</div>
+                <div class="absolute left-0 top-0 h-full bg-green-200/20 rounded transition-all duration-100"
+                     [style.width.%]="100 * row.sum / getMaxSum(processSide(orderBook.bids, levels))"></div>
+              </div>
+            </ng-container>
+          </div>
+        </div>
+      </div>
+    }
+  </ng-container>
 </div>

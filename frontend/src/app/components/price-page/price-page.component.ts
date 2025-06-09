@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, OnInit, OnDestroy } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, OnInit, OnDestroy, HostListener, Input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { CandlesViewComponent } from '../candles-view/candles-view.component';
 import { OrderBookComponent } from '../order-book/order-book.component';
@@ -13,7 +13,8 @@ import { BreadcrumbsComponent } from '../breadcrumbs/breadcrumbs.component';
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class PricePageComponent implements OnInit, OnDestroy {
-  symbol = '';
+  @Input() symbol!: string;
+  isWideScreen = window.innerWidth >= 1024;
   private route = inject(ActivatedRoute);
 
   ngOnInit() {
@@ -23,4 +24,9 @@ export class PricePageComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {}
+
+  @HostListener('window:resize')
+  onResize() {
+    this.isWideScreen = window.innerWidth >= 1024;
+  }
 }
