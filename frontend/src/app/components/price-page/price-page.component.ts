@@ -1,9 +1,10 @@
-import { ChangeDetectionStrategy, Component, inject, OnInit, OnDestroy, HostListener, Input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, OnInit, OnDestroy, HostListener, Input, input, computed, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { CandlesViewComponent } from '../candles-view/candles-view.component';
 import { OrderBookComponent } from '../order-book/order-book.component';
 import { ActivatedRoute } from '@angular/router';
 import { BreadcrumbsComponent } from '../breadcrumbs/breadcrumbs.component';
+import type { InputSignal } from '@angular/core';
 
 @Component({
   selector: 'app-price-page',
@@ -14,7 +15,8 @@ import { BreadcrumbsComponent } from '../breadcrumbs/breadcrumbs.component';
 })
 export class PricePageComponent implements OnInit, OnDestroy {
   @Input() symbol!: string;
-  isWideScreen = window.innerWidth >= 1024;
+  isWideScreenSignal = signal(window.innerWidth >= 1024);
+  layoutSignal = computed(() => this.isWideScreenSignal() ? 'vertical' : 'horizontal' as const) as InputSignal<'vertical' | 'horizontal'>;
   private route = inject(ActivatedRoute);
 
   ngOnInit() {
@@ -27,6 +29,6 @@ export class PricePageComponent implements OnInit, OnDestroy {
 
   @HostListener('window:resize')
   onResize() {
-    this.isWideScreen = window.innerWidth >= 1024;
+    this.isWideScreenSignal.set(window.innerWidth >= 1024);
   }
 }

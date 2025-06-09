@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, Input, OnDestroy, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input, InputSignal, OnDestroy, OnInit, inject, signal, Signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { OrderBookService } from '../../services/order-book.service';
 import { OrderBook, OrderBookEntry } from '../../models/order-book.model';
@@ -19,18 +19,23 @@ interface OrderBookRow {
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class OrderBookComponent implements OnInit, OnDestroy {
-  @Input() symbol!: string;
-  @Input() layout: Layout = 'horizontal';
+  @Input({ required: true }) symbol!: string;
+  @Input({ alias: 'layout' }) layoutSignal!: InputSignal<Layout>;
+
   private orderBookService = inject(OrderBookService);
-  orderBook$ = this.orderBookService.orderBook$;
-  levels = 15;
+  orderBookSignal: Signal<OrderBook | null> = signal<OrderBook | null>(null);
+  readonly levels = 15;
 
   ngOnInit(): void {
-    this.orderBookService.connect(this.symbol);
+    if (this.symbol) {
+      this.orderBookSignal = this.orderBookService.subscribeToOrderBook(this.symbol);
+    }
   }
 
   ngOnDestroy(): void {
-    this.orderBookService.disconnect();
+    if (this.symbol) {
+      this.orderBookService.unsubscribeFromOrderBook(this.symbol);
+    }
   }
 
   // Helper to process order book side (bids or asks)

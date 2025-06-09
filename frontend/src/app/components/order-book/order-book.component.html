@@ -2,9 +2,9 @@
   <div class="mb-4 flex justify-between">
     <h3 class="text-lg font-medium m-0">Order Book</h3>
   </div>
-  <ng-container *ngIf="orderBook$ | async as orderBook">
+  <ng-container *ngIf="orderBookSignal() as orderBook">
     <!-- Horizontal layout: bids and asks side by side, only price and quantity, price centered -->
-     @if (layout === 'horizontal') {
+    @if (layoutSignal() === 'horizontal') {
       <div class="flex flex-row gap-2 w-full">
         <!-- Bids (left) -->
         <div class="flex-1">
@@ -25,7 +25,7 @@
         <!-- Asks (right) -->
         <div class="flex-1">
           <div class="grid grid-cols-1 text-gray-400 font-medium text-xs border-b border-gray-700 pb-1">
-            <span >Ask</span>
+            <span>Ask</span>
           </div>
           <div class="overflow-y-auto" style="max-height: 280px;">
             <ng-container *ngFor="let row of processSide(orderBook.asks, levels)">

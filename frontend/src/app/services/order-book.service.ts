@@ -1,68 +1,109 @@
-import { Injectable } from '@angular/core';
-import { BehaviorSubject } from 'rxjs';
+import { Injectable, signal, Signal } from '@angular/core';
 import { webSocket, WebSocketSubject } from 'rxjs/webSocket';
-import { throttleTime } from 'rxjs/operators';
+import { Subject, timer } from 'rxjs';
+import { retry, takeUntil } from 'rxjs/operators';
 import { OrderBook } from '../models/order-book.model';
+
+interface BinanceOrderBookMessage {
+  b: string[][];  // bids array
+  a: string[][];  // asks array
+  u: number;      // lastUpdateId
+}
+
+interface OrderBookStream {
+  ws: WebSocketSubject<BinanceOrderBookMessage>;
+  destroy$: Subject<void>;
+  signal: Signal<OrderBook>;
+}
 
 @Injectable({
   providedIn: 'root'
 })
 export class OrderBookService {
-  private wsConnection: WebSocketSubject<any> | null = null;
-  private orderBookSubject = new BehaviorSubject<OrderBook>({ bids: [], asks: [], lastUpdateId: 0 });
-  public orderBook$ = this.orderBookSubject.asObservable().pipe(throttleTime(200));
+  private streams = new Map<string, OrderBookStream>();
+  private readonly RECONNECT_INTERVAL = 5000;
 
-  connect(symbol: string): void {
-    const wsUrl = `wss://stream.binance.com/stream?streams=${symbol.toLowerCase()}@depth`;
+  /**
+   * Subscribe to live order book updates for a symbol.
+   * Returns a Signal<OrderBook> that updates with each new order book snapshot.
+   * @param symbol Trading pair symbol (e.g., BTCUSDT)
+   */
+  subscribeToOrderBook(symbol: string): Signal<OrderBook> {
+    const key = symbol.toUpperCase();
+    this.unsubscribeFromOrderBook(symbol);
     
-    this.wsConnection = webSocket({
-      url: wsUrl,
+    const orderBookSignal = signal<OrderBook>({ bids: [], asks: [], lastUpdateId: 0 });
+    const destroy$ = new Subject<void>();
+    
+    const ws = webSocket<BinanceOrderBookMessage>({
+      url: `wss://stream.binance.com:9443/ws/${symbol.toLowerCase()}@depth`,
       openObserver: {
-        next: () => {
-          console.log('WebSocket connected');
-        }
+        next: () => console.log('[OrderBookService] WebSocket connected')
       }
     });
 
-    this.wsConnection.subscribe({
+    ws.pipe(
+      retry({
+        delay: () => timer(this.RECONNECT_INTERVAL),
+        resetOnSuccess: true
+      }),
+      takeUntil(destroy$)
+    ).subscribe({
       next: (msg) => {
-        const data = msg.data;
-        if (!data) return;
-        const orderBook: OrderBook = {
-          bids: data.b.map((bid: string[]) => ({
-            price: parseFloat(bid[0]),
-            quantity: parseFloat(bid[1])
-          })),
-          asks: data.a.map((ask: string[]) => ({
-            price: parseFloat(ask[0]),
-            quantity: parseFloat(ask[1])
-          })),
-          lastUpdateId: data.u
-        };
-        this.orderBookSubject.next(orderBook);
+        try {
+          if (!msg) return;
+          
+          const orderBook: OrderBook = {
+            bids: msg.b.map((bid: string[]) => ({
+              price: parseFloat(bid[0]),
+              quantity: parseFloat(bid[1])
+            })),
+            asks: msg.a.map((ask: string[]) => ({
+              price: parseFloat(ask[0]),
+              quantity: parseFloat(ask[1])
+            })),
+            lastUpdateId: msg.u
+          };
+          orderBookSignal.set(orderBook);
+        } catch (err) {
+          console.error('[OrderBookService] Message processing error:', err);
+        }
       },
-      error: (error) => {
-        console.error('WebSocket error:', error);
-        this.reconnect(symbol);
+      error: (err) => {
+        console.error('[OrderBookService] WebSocket error:', err);
       },
       complete: () => {
-        console.log('WebSocket connection closed');
-        this.reconnect(symbol);
+        console.log('[OrderBookService] WebSocket connection closed');
       }
     });
+
+    this.streams.set(key, { ws, destroy$, signal: orderBookSignal });
+    return orderBookSignal;
   }
 
-  private reconnect(symbol: string): void {
-    setTimeout(() => {
-      console.log('Attempting to reconnect...');
-      this.connect(symbol);
-    }, 5000);
+  /**
+   * Unsubscribe and clean up order book WebSocket for a symbol.
+   */
+  unsubscribeFromOrderBook(symbol: string): void {
+    const key = symbol.toUpperCase();
+    const stream = this.streams.get(key);
+    if (stream) {
+      stream.destroy$.next();
+      stream.destroy$.complete();
+      stream.ws.complete();
+      this.streams.delete(key);
+    }
   }
 
-  disconnect(): void {
-    if (this.wsConnection) {
-      this.wsConnection.complete();
-      this.wsConnection = null;
+  /**
+   * Clean up all WebSocket connections.
+   */
+  closeAll(): void {
+    for (const [key, stream] of this.streams.entries()) {
+      stream.destroy$.next();
+      stream.destroy$.complete();
+      stream.ws.complete();
+      this.streams.delete(key);
     }
   }
 } 

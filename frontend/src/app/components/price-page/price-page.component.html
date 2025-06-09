@@ -13,7 +13,7 @@
       <app-candles-view [symbol]="symbol"></app-candles-view>
     </div>
     <div class="w-full max-w-full lg:max-w-[490px]">
-      <app-order-book [symbol]="symbol" [layout]="isWideScreen ? 'vertical' : 'horizontal'"></app-order-book>
+      <app-order-book [symbol]="symbol" [layout]="layoutSignal"></app-order-book>
     </div>
   </div>
 </div>
