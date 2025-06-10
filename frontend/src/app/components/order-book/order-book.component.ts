@@ -41,7 +41,7 @@ export class OrderBookComponent implements OnInit, OnDestroy {
   // Helper to process order book side (bids or asks)
   processSide(entries: OrderBookEntry[], levels: number): OrderBookRow[] {
     let sum = 0;
-    return entries.slice(0, levels).map(entry => {
+    const rows: OrderBookRow[] = entries.slice(0, levels).map(entry => {
       const total = entry.price * entry.quantity;
       sum += total;
       return {
@@ -51,6 +51,11 @@ export class OrderBookComponent implements OnInit, OnDestroy {
         sum
       };
     });
+    // Pad with empty rows if needed
+    while (rows.length < levels) {
+      rows.push({ price: 0, quantity: 0, total: 0, sum });
+    }
+    return rows;
   }
 
   // Helper to get max sum for bar scaling
