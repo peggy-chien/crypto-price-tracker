@@ -12,9 +12,10 @@ interface BinanceOrderBookMessage {
 }
 
 interface OrderBookStream {
-  ws: WebSocketSubject<BinanceOrderBookMessage>;
+  ws: WebSocketSubject<BinanceOrderBookMessage> | null;
   destroy$: Subject<void>;
-  signal: Signal<OrderBook>;
+  signal: ReturnType<typeof signal<OrderBook>>; // Keep the same signal instance
+  isConnected: boolean;
 }
 
 @Injectable({
@@ -29,12 +30,13 @@ export class OrderBookService {
   constructor() {
     effect(() => {
       if (!this.appVisibility.isVisible()) {
-        this.closeAll();
+        this.disconnectAll();
       } else {
-        // Resume all previously active streams
-        for (const symbol of this.activeSymbols) {
-          if (!this.streams.has(symbol)) {
-            this.subscribeToOrderBook(symbol);
+        // Reconnect if there are any disconnected streams
+        for (const stream of this.streams.values()) {
+          if (!stream.isConnected) {
+            this.reconnectAll();
+            break;
           }
         }
       }
@@ -48,25 +50,65 @@ export class OrderBookService {
    */
   subscribeToOrderBook(symbol: string): Signal<OrderBook> {
     const key = symbol.toUpperCase();
-    this.unsubscribeFromOrderBook(symbol);
     this.activeSymbols.add(key);
     
+    // If stream already exists, return existing signal
+    if (this.streams.has(key)) {
+      const stream = this.streams.get(key)!;
+      if (!stream.isConnected) {
+        this.connectStream(key, symbol);
+      }
+      return stream.signal.asReadonly();
+    }
+    
+    // Create new stream with persistent signal
     const orderBookSignal = signal<OrderBook>({ bids: [], asks: [], lastUpdateId: 0 });
     const destroy$ = new Subject<void>();
+    
+    const stream: OrderBookStream = {
+      ws: null,
+      destroy$,
+      signal: orderBookSignal,
+      isConnected: false
+    };
+    
+    this.streams.set(key, stream);
+    this.connectStream(key, symbol);
+    
+    return orderBookSignal.asReadonly();
+  }
+
+  /**
+   * Connect or reconnect WebSocket for a specific stream
+   */
+  private connectStream(key: string, symbol: string): void {
+    const stream = this.streams.get(key);
+    if (!stream || stream.isConnected) return;
     
     const ws = webSocket<BinanceOrderBookMessage>({
       url: `wss://stream.binance.com:9443/ws/${symbol.toLowerCase()}@depth`,
       openObserver: {
-        next: () => console.log('[OrderBookService] WebSocket connected')
+        next: () => {
+          console.log(`[OrderBookService] WebSocket connected for ${symbol}`);
+          stream.isConnected = true;
+        }
+      },
+      closeObserver: {
+        next: () => {
+          console.log(`[OrderBookService] WebSocket closed for ${symbol}`);
+          stream.isConnected = false;
+        }
       }
     });
+
+    stream.ws = ws;
 
     ws.pipe(
       retry({
         delay: () => timer(this.RECONNECT_INTERVAL),
         resetOnSuccess: true
       }),
-      takeUntil(destroy$)
+      takeUntil(stream.destroy$)
     ).subscribe({
       next: (msg) => {
         try {
@@ -83,21 +125,50 @@ export class OrderBookService {
             })),
             lastUpdateId: msg.u
           };
-          orderBookSignal.set(orderBook);
+          
+          // Update the persistent signal
+          stream.signal.set(orderBook);
         } catch (err) {
           console.error('[OrderBookService] Message processing error:', err);
         }
       },
       error: (err) => {
-        console.error('[OrderBookService] WebSocket error:', err);
+        console.error(`[OrderBookService] WebSocket error for ${symbol}:`, err);
+        stream.isConnected = false;
       },
       complete: () => {
-        console.log('[OrderBookService] WebSocket connection closed');
+        console.log(`[OrderBookService] WebSocket connection closed for ${symbol}`);
+        stream.isConnected = false;
       }
     });
+  }
 
-    this.streams.set(key, { ws, destroy$, signal: orderBookSignal });
-    return orderBookSignal;
+  /**
+   * Disconnect all WebSocket connections but keep signals
+   */
+  private disconnectAll(): void {
+    console.log('[OrderBookService] Disconnecting all streams');
+    for (const [key, stream] of this.streams.entries()) {
+      if (stream.ws && stream.isConnected) {
+        stream.ws.complete();
+        stream.ws = null;
+        stream.isConnected = false;
+      }
+    }
+  }
+
+  /**
+   * Reconnect all active streams that are not connected
+   */
+  private reconnectAll(): void {
+    console.log('[OrderBookService] Reconnecting all disconnected streams');
+    for (const symbol of this.activeSymbols) {
+      const key = symbol.toUpperCase();
+      const stream = this.streams.get(key);
+      if (stream && !stream.isConnected) {
+        this.connectStream(key, symbol);
+      }
+    }
   }
 
   /**
@@ -109,21 +180,26 @@ export class OrderBookService {
     if (stream) {
       stream.destroy$.next();
       stream.destroy$.complete();
-      stream.ws.complete();
+      if (stream.ws) {
+        stream.ws.complete();
+      }
       this.streams.delete(key);
     }
     this.activeSymbols.delete(key);
   }
 
   /**
-   * Clean up all WebSocket connections.
+   * Clean up all WebSocket connections and streams.
    */
   closeAll(): void {
     for (const [key, stream] of this.streams.entries()) {
       stream.destroy$.next();
       stream.destroy$.complete();
-      stream.ws.complete();
+      if (stream.ws) {
+        stream.ws.complete();
+      }
       this.streams.delete(key);
     }
+    this.activeSymbols.clear();
   }
-} 
+}

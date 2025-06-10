@@ -18,9 +18,10 @@ interface BinanceKlineMessage {
 }
 
 interface CandleStream {
-  ws: WebSocketSubject<BinanceKlineMessage>;
+  ws: WebSocketSubject<BinanceKlineMessage> | null;
   destroy$: Subject<void>;
-  signal: Signal<CandlestickData | null>;
+  signal: ReturnType<typeof signal<CandlestickData | null>>; // Keep the same signal instance
+  isConnected: boolean;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -34,15 +35,10 @@ export class CandlesService {
   constructor() {
     effect(() => {
       if (!this.appVisibility.isVisible()) {
-        this.closeAll();
+        this.disconnectAll();
       } else {
         // Resume all previously active streams
-        for (const key of this.activeKeys) {
-          if (!this.streams.has(key)) {
-            const [symbol, interval] = key.split('_');
-            this.subscribeToLiveKlines(symbol, interval as CandleInterval);
-          }
-        }
+        this.reconnectAll();
       }
     });
   }
@@ -72,30 +68,70 @@ export class CandlesService {
   /**
    * Subscribe to live kline updates for a symbol and interval.
    * Returns a Signal<CandlestickData|null> that updates with each new candle.
-   * Cleans up previous connection for the same symbol/interval.
    * @param symbol Trading pair symbol (e.g., BTCUSDT)
    * @param interval Kline interval (e.g., '1m', '1h')
    */
   subscribeToLiveKlines(symbol: string, interval: CandleInterval = CandleInterval.OneMinute): Signal<CandlestickData | null> {
     const key = `${symbol.toLowerCase()}_${interval}`;
-    this.unsubscribeFromLiveKlines(symbol, interval);
     this.activeKeys.add(key);
+    
+    // If stream already exists, return existing signal
+    if (this.streams.has(key)) {
+      const stream = this.streams.get(key)!;
+      if (!stream.isConnected) {
+        this.connectStream(key, symbol, interval);
+      }
+      return stream.signal.asReadonly();
+    }
+    
+    // Create new stream with persistent signal
     const candleSignal = signal<CandlestickData | null>(null);
     const destroy$ = new Subject<void>();
     
+    const stream: CandleStream = {
+      ws: null,
+      destroy$,
+      signal: candleSignal,
+      isConnected: false
+    };
+    
+    this.streams.set(key, stream);
+    this.connectStream(key, symbol, interval);
+    
+    return candleSignal.asReadonly();
+  }
+
+  /**
+   * Connect or reconnect WebSocket for a specific stream
+   */
+  private connectStream(key: string, symbol: string, interval: CandleInterval): void {
+    const stream = this.streams.get(key);
+    if (!stream || stream.isConnected) return;
+
     const ws = webSocket<BinanceKlineMessage>({
       url: `wss://stream.binance.com:9443/ws/${symbol.toLowerCase()}@kline_${interval}`,
       openObserver: {
-        next: () => console.log('[CandlesService] WebSocket connected')
+        next: () => {
+          console.log(`[CandlesService] WebSocket connected for ${symbol} ${interval}`);
+          stream.isConnected = true;
+        }
+      },
+      closeObserver: {
+        next: () => {
+          console.log(`[CandlesService] WebSocket closed for ${symbol} ${interval}`);
+          stream.isConnected = false;
+        }
       }
     });
+
+    stream.ws = ws;
 
     ws.pipe(
       retry({
         delay: () => timer(this.RECONNECT_INTERVAL),
         resetOnSuccess: true
       }),
-      takeUntil(destroy$)
+      takeUntil(stream.destroy$)
     ).subscribe({
       next: (msg) => {
         try {
@@ -108,22 +144,51 @@ export class CandlesService {
               low: parseFloat(k.l),
               close: parseFloat(k.c)
             };
-            candleSignal.set(candle);
+            
+            // Update the persistent signal
+            stream.signal.set(candle);
           }
         } catch (err) {
           console.error('[CandlesService] Message processing error:', err);
         }
       },
       error: (err) => {
-        console.error('[CandlesService] WebSocket error:', err);
+        console.error(`[CandlesService] WebSocket error for ${symbol} ${interval}:`, err);
+        stream.isConnected = false;
       },
       complete: () => {
-        console.log('[CandlesService] WebSocket connection closed');
+        console.log(`[CandlesService] WebSocket connection closed for ${symbol} ${interval}`);
+        stream.isConnected = false;
       }
     });
+  }
 
-    this.streams.set(key, { ws, destroy$, signal: candleSignal });
-    return candleSignal;
+  /**
+   * Disconnect all WebSocket connections but keep signals
+   */
+  private disconnectAll(): void {
+    console.log('[CandlesService] Disconnecting all streams');
+    for (const [key, stream] of this.streams.entries()) {
+      if (stream.ws && stream.isConnected) {
+        stream.ws.complete();
+        stream.ws = null;
+        stream.isConnected = false;
+      }
+    }
+  }
+
+  /**
+   * Reconnect all active streams
+   */
+  private reconnectAll(): void {
+    console.log('[CandlesService] Reconnecting all streams');
+    for (const key of this.activeKeys) {
+      const stream = this.streams.get(key);
+      if (stream && !stream.isConnected) {
+        const [symbol, interval] = key.split('_');
+        this.connectStream(key, symbol, interval as CandleInterval);
+      }
+    }
   }
 
   /**
@@ -135,21 +200,26 @@ export class CandlesService {
     if (stream) {
       stream.destroy$.next();
       stream.destroy$.complete();
-      stream.ws.complete();
+      if (stream.ws) {
+        stream.ws.complete();
+      }
       this.streams.delete(key);
     }
     this.activeKeys.delete(key);
   }
 
   /**
-   * Clean up all WebSocket connections.
+   * Clean up all WebSocket connections and streams.
    */
   closeAll(): void {
     for (const [key, stream] of this.streams.entries()) {
       stream.destroy$.next();
       stream.destroy$.complete();
-      stream.ws.complete();
+      if (stream.ws) {
+        stream.ws.complete();
+      }
       this.streams.delete(key);
     }
+    this.activeKeys.clear();
   }
-} 
+}
