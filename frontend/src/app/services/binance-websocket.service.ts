@@ -175,14 +175,28 @@ export class BinanceWebsocketService {
    * Unsubscribe and clean up multi-ticker WebSocket.
    */
   unsubscribeFromTickers(): void {
+    this.unsubscribeFromMultiTicker();
+    this.clearMultiPairs();
+  }
+
+  /**
+   * Unsubscribe and clean up multi-ticker WebSocket.
+   */
+  private unsubscribeFromMultiTicker(): void {
     if (this.multiWs) {
       this.multiDestroy$.next();
       this.multiDestroy$.complete();
       this.multiWs.complete();
       this.multiWs = null;
       this.multiSignal.set([]);
-      this.multiPairs = [];
     }
+  }
+
+  /**
+   * Explicitly clear the multiPairs list (call this when user leaves the grid page)
+   */
+  clearMultiPairs(): void {
+    this.multiPairs = [];
   }
 
   /**
@@ -195,7 +209,7 @@ export class BinanceWebsocketService {
       stream.ws.complete();
       this.streams.delete(key);
     }
-    this.unsubscribeFromTickers();
+    this.unsubscribeFromMultiTicker();
   }
 
   /**
