@@ -4,7 +4,7 @@
   "homepage": "https://peggy-chien.github.io/crypto-price-tracker/",
   "scripts": {
     "ng": "ng",
-    "start": "ng serve",
+    "start": "ng serve --host 0.0.0.0",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
     "build": "ng build",
