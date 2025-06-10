@@ -15,18 +15,26 @@ This project is a real-time cryptocurrency price tracker built with Angular 19. 
   - Real-time updates via WebSocket for the latest candle.
   - Custom time axis formatting for clear multi-day navigation.
 
-- **Order Book (placeholder):**
-  - UI ready for future order book integration.
+- **Real-time Order Book:**
+  - Live order book displaying current bids and asks with real-time updates.
+  - Color-coded price levels for easy visualization of market depth.
+  - Automatic updates via WebSocket streaming.
+
+- **Smart Resource Management:**
+  - Automatic WebSocket disconnect/reconnect when user switches tabs or minimizes the browser.
+  - Persistent data signals that maintain state across connection cycles.
+  - Efficient memory management preventing data leaks during reconnections.
 
 - **Modern Angular Architecture:**
   - Uses Angular 19 standalone components, signals, and best practices for state management and reactivity.
   - Clean separation of frontend and backend (future-ready for full-stack expansion).
+  - Reactive programming with RxJS for real-time data streams.
 
 ## Data Source
 
 All price and candlestick data is sourced from the official [Binance public APIs](https://github.com/binance/binance-spot-api-docs):
 - [Binance REST API](https://github.com/binance/binance-spot-api-docs/blob/master/rest-api.md) for historical candles
-- [Binance WebSocket Streams](https://github.com/binance/binance-spot-api-docs/blob/master/web-socket-streams.md) for real-time price and kline updates
+- [Binance WebSocket Streams](https://github.com/binance/binance-spot-api-docs/blob/master/web-socket-streams.md) for real-time price, kline, and order book updates
 
 ## Chart Library
 
