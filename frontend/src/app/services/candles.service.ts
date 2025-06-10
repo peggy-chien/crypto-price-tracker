@@ -1,10 +1,11 @@
-import { inject, Injectable, signal, Signal } from '@angular/core';
+import { inject, Injectable, signal, Signal, effect } from '@angular/core';
 import { CandlestickData, UTCTimestamp } from 'lightweight-charts';
 import { HttpClient } from '@angular/common/http';
 import { Observable, map, Subject, catchError, of, timer } from 'rxjs';
 import { webSocket, WebSocketSubject } from 'rxjs/webSocket';
-import { takeUntil, retry } from 'rxjs/operators';
+import { retry, takeUntil } from 'rxjs/operators';
 import { CandleInterval } from '../models/candle-interval.type';
+import { AppVisibilityService } from './app-visibility.service';
 
 interface BinanceKlineMessage {
   k: {
@@ -27,6 +28,24 @@ export class CandlesService {
   private http = inject(HttpClient);
   private streams = new Map<string, CandleStream>();
   private readonly RECONNECT_INTERVAL = 5000;
+  private activeKeys = new Set<string>();
+  private appVisibility = inject(AppVisibilityService);
+
+  constructor() {
+    effect(() => {
+      if (!this.appVisibility.isVisible()) {
+        this.closeAll();
+      } else {
+        // Resume all previously active streams
+        for (const key of this.activeKeys) {
+          if (!this.streams.has(key)) {
+            const [symbol, interval] = key.split('_');
+            this.subscribeToLiveKlines(symbol, interval as CandleInterval);
+          }
+        }
+      }
+    });
+  }
 
   /**
    * Fetch historical candles for a symbol and interval.
@@ -60,7 +79,7 @@ export class CandlesService {
   subscribeToLiveKlines(symbol: string, interval: CandleInterval = CandleInterval.OneMinute): Signal<CandlestickData | null> {
     const key = `${symbol.toLowerCase()}_${interval}`;
     this.unsubscribeFromLiveKlines(symbol, interval);
-    
+    this.activeKeys.add(key);
     const candleSignal = signal<CandlestickData | null>(null);
     const destroy$ = new Subject<void>();
     
@@ -119,6 +138,7 @@ export class CandlesService {
       stream.ws.complete();
       this.streams.delete(key);
     }
+    this.activeKeys.delete(key);
   }
 
   /**

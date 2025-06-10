@@ -1,8 +1,9 @@
-import { Injectable, signal, Signal } from '@angular/core';
+import { Injectable, signal, Signal, inject, effect } from '@angular/core';
 import { webSocket, WebSocketSubject } from 'rxjs/webSocket';
 import { Subject, timer } from 'rxjs';
 import { retry, takeUntil } from 'rxjs/operators';
 import { OrderBook } from '../models/order-book.model';
+import { AppVisibilityService } from './app-visibility.service';
 
 interface BinanceOrderBookMessage {
   b: string[][];  // bids array
@@ -22,6 +23,23 @@ interface OrderBookStream {
 export class OrderBookService {
   private streams = new Map<string, OrderBookStream>();
   private readonly RECONNECT_INTERVAL = 5000;
+  private activeSymbols = new Set<string>();
+  private appVisibility = inject(AppVisibilityService);
+
+  constructor() {
+    effect(() => {
+      if (!this.appVisibility.isVisible()) {
+        this.closeAll();
+      } else {
+        // Resume all previously active streams
+        for (const symbol of this.activeSymbols) {
+          if (!this.streams.has(symbol)) {
+            this.subscribeToOrderBook(symbol);
+          }
+        }
+      }
+    });
+  }
 
   /**
    * Subscribe to live order book updates for a symbol.
@@ -31,6 +49,7 @@ export class OrderBookService {
   subscribeToOrderBook(symbol: string): Signal<OrderBook> {
     const key = symbol.toUpperCase();
     this.unsubscribeFromOrderBook(symbol);
+    this.activeSymbols.add(key);
     
     const orderBookSignal = signal<OrderBook>({ bids: [], asks: [], lastUpdateId: 0 });
     const destroy$ = new Subject<void>();
@@ -93,6 +112,7 @@ export class OrderBookService {
       stream.ws.complete();
       this.streams.delete(key);
     }
+    this.activeSymbols.delete(key);
   }
 
   /**

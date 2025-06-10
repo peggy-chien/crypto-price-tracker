@@ -1,8 +1,9 @@
-import { Injectable, signal, Signal } from '@angular/core';
+import { Injectable, signal, Signal, inject, effect } from '@angular/core';
 import { webSocket, WebSocketSubject } from 'rxjs/webSocket';
 import { Subject, timer } from 'rxjs';
 import { retry, takeUntil } from 'rxjs/operators';
 import { TradingPairTicker } from '../models/trading-pair-ticker.model';
+import { AppVisibilityService } from './app-visibility.service';
 
 interface BinanceTickerMessage {
   s: string;  // symbol
@@ -31,6 +32,27 @@ export class BinanceWebsocketService {
   private multiDestroy$ = new Subject<void>();
   private multiPairs: string[] = [];
   private readonly RECONNECT_INTERVAL = 5000;
+  private activeSymbols = new Set<string>();
+  private appVisibility = inject(AppVisibilityService);
+
+  constructor() {
+    effect(() => {
+      if (!this.appVisibility.isVisible()) {
+        this.closeAll();
+      } else {
+        // Resume all previously active streams
+        for (const symbol of this.activeSymbols) {
+          if (!this.streams.has(symbol)) {
+            this.subscribeToTicker(symbol);
+          }
+        }
+        // Resume multi-ticker if needed
+        if (this.multiPairs.length > 0 && !this.multiWs) {
+          this.subscribeToTickers(this.multiPairs);
+        }
+      }
+    });
+  }
 
   /**
    * Subscribe to live ticker updates for a symbol (per-symbol).
@@ -39,6 +61,7 @@ export class BinanceWebsocketService {
   subscribeToTicker(symbol: string): Signal<TradingPairTicker | null> {
     const key = symbol.toUpperCase();
     this.unsubscribeFromTicker(symbol);
+    this.activeSymbols.add(key);
     
     const tickerSignal = signal<TradingPairTicker | null>(null);
     const destroy$ = new Subject<void>();
@@ -145,6 +168,7 @@ export class BinanceWebsocketService {
       stream.ws.complete();
       this.streams.delete(key);
     }
+    this.activeSymbols.delete(key);
   }
 
   /**
