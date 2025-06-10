@@ -1,4 +1,4 @@
-<div class="bg-[#1a1a1a] rounded-lg p-4 text-white font-sans">
+<div class="bg-white dark:bg-[#1a1a1a] rounded-lg p-4 dark:text-white font-sans">
   <div class="mb-4 flex justify-between">
     <h3 class="text-lg font-medium m-0">Order Book</h3>
   </div>
@@ -67,7 +67,7 @@
         </div>
         <!-- Spread Indicator -->
         <div *ngIf="getSpread(orderBook) !== null" class="my-2">
-          <div class="bg-gray-800 text-white text-xs rounded px-3 py-1 border border-gray-700 shadow text-center">
+          <div class="bg-gray-100 dark:bg-gray-800 dark:text-white text-xs rounded px-3 py-1 border border-gray-200 dark:border-gray-700 text-center">
             Spread: <span class="font-mono">{{getSpread(orderBook) | number:'1.2-8'}}</span>
           </div>
         </div>
