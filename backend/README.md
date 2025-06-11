@@ -27,11 +27,30 @@ The backend will be available at `http://127.0.0.1:5000/` by default.
 
 ## Database (SQLite)
 
+### Database Migrations (Flask-Migrate)
+
+When you change your models, use Flask-Migrate to manage schema changes:
+
+1. **Initialize migrations directory (only once):**
+   ```bash
+   flask db init
+   ```
+2. **Generate a migration after model changes:**
+   ```bash
+   flask db migrate -m "Describe your change"
+   ```
+3. **Apply the migration to the database:**
+   ```bash
+   flask db upgrade
+   ```
+
+- The `migrations/` directory and its contents **should be tracked in git** so all developers share the same migration history.
+
 ### When you modify models (e.g., add/change tables) or set up the project for the first time:
 
 1. Run the database setup script (from the backend directory):
    ```bash
-   python scripts/setup_db.py
+   python -m scripts.setup_db
    ```
    This will create the `instance/` directory (if it doesn't exist), initialize the database, and add default favorite pairs if needed.
 

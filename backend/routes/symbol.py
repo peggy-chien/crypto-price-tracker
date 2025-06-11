@@ -14,7 +14,7 @@ def get_symbols():
 @symbol_bp.route('/favorite', methods=['GET'])
 def get_favorites():
     favorites = FavoritePair.query.all()
-    return jsonify([f.symbol for f in favorites])
+    return jsonify([f.as_dict() for f in favorites])
 
 @symbol_bp.route('/favorite', methods=['POST'])
 def add_favorite():

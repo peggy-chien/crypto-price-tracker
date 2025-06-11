@@ -2,3 +2,4 @@ Flask==3.0.3
 python-binance==1.0.19 
 flask-cors 
 Flask-SQLAlchemy
+Flask-Migrate
