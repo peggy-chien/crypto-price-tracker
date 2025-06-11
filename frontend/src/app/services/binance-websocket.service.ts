@@ -4,6 +4,7 @@ import { Subject, timer } from 'rxjs';
 import { retry, takeUntil } from 'rxjs/operators';
 import { TradingPairTicker } from '../models/trading-pair-ticker.model';
 import { AppVisibilityService } from './app-visibility.service';
+import { Symbol } from '../models/symbol.model';
 
 interface BinanceTickerMessage {
   s: string;  // symbol
@@ -31,7 +32,7 @@ export class BinanceWebsocketService {
   private multiWs: WebSocketSubject<BinanceMultiTickerMessage> | null = null;
   private multiSignal = signal<TradingPairTicker[]>([]);
   private multiDestroy$ = new Subject<void>();
-  private multiPairs: string[] = [];
+  private multiPairs: Symbol[] = [];
   private multiIsConnected = false;
   private readonly RECONNECT_INTERVAL = 5000;
   private activeSymbols = new Set<string>();
@@ -119,7 +120,8 @@ export class BinanceWebsocketService {
           const ticker: TradingPairTicker = {
             symbol: msg.s,
             price: parseFloat(msg.c),
-            change: parseFloat(msg.P)
+            change: parseFloat(msg.P),
+            order: this.multiPairs.find(p => p.symbol === msg.s)?.order ?? 0
           };
           // Update the persistent signal
           stream.signal.set(ticker);
@@ -143,7 +145,7 @@ export class BinanceWebsocketService {
    * Returns a signal<TradingPairTicker[]>.
    * @param pairs Array of trading pair symbols (e.g., ['BTCUSDT', 'ETHUSDT'])
    */
-  subscribeToTickers(pairs: string[]): Signal<TradingPairTicker[]> {
+  subscribeToTickers(pairs: Symbol[]): Signal<TradingPairTicker[]> {
     this.multiPairs = pairs;
     
     if (!this.multiIsConnected) {
@@ -161,7 +163,7 @@ export class BinanceWebsocketService {
 
     this.disconnectMultiTickerStream();
     
-    const streams = this.multiPairs.map(pair => `${pair.toLowerCase()}@ticker`).join('/');
+    const streams = this.multiPairs.map(pair => `${pair.symbol.toLowerCase()}@ticker`).join('/');
     
     this.multiWs = webSocket<BinanceMultiTickerMessage>({
       url: `wss://stream.binance.com:9443/stream?streams=${streams}`,
@@ -194,7 +196,8 @@ export class BinanceWebsocketService {
             const ticker: TradingPairTicker = {
               symbol: msg.data.s,
               price: parseFloat(msg.data.c),
-              change: parseFloat(msg.data.P)
+              change: parseFloat(msg.data.P),
+              order: this.multiPairs.find(p => p.symbol === msg.data.s)?.order ?? 0
             };
             tickerMap[ticker.symbol] = ticker;
             this.multiSignal.set(Object.values(tickerMap));

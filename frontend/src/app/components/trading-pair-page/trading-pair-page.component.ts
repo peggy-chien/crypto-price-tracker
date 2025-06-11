@@ -4,6 +4,8 @@ import { CommonModule } from '@angular/common';
 import { BinanceWebsocketService } from '../../services/binance-websocket.service';
 import { Router } from '@angular/router';
 import { SymbolService } from '../../services/symbol.service';
+import { TradingPairTicker } from '../../models/trading-pair-ticker.model';
+import { Symbol } from '../../models/symbol.model';
 
 @Component({
   selector: 'app-trading-pair-page',
@@ -16,13 +18,14 @@ export class TradingPairPageComponent implements OnInit, OnDestroy {
   private binanceWs = inject(BinanceWebsocketService);
   private router = inject(Router);
   private symbolService = inject(SymbolService);
-  pairs = signal<string[]>([]);
-  tradingPairs: Signal<any[]> = computed(() => this.binanceWs.subscribeToTickers(this.pairs())());
+  pairs = signal<Symbol[]>([]);
+  tradingPairs: Signal<TradingPairTicker[]> = computed(() => {
+    const tickers = this.binanceWs.subscribeToTickers(this.pairs())();
+    return [...tickers].sort((a, b) => a.order - b.order);
+  });
 
   ngOnInit() {
-    this.symbolService.getFavorites().subscribe(favs => {
-      this.pairs.set([...favs]);
-    });
+    this.symbolService.getFavorites().subscribe(favs => this.pairs.set(favs));
   }
 
   ngOnDestroy() {
