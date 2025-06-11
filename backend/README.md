@@ -24,3 +24,33 @@ The backend will be available at `http://127.0.0.1:5000/` by default.
 
 **Note:**
 - When running with Docker Compose in development, the backend is mapped to port `5050` (i.e., `http://localhost:5050/`) due to a port conflict with macOS Control Center. 
+
+## Database (SQLite)
+
+### When you modify models (e.g., add/change tables) or set up the project for the first time:
+
+1. Run the database setup script (from the backend directory):
+   ```bash
+   python scripts/setup_db.py
+   ```
+   This will create the `instance/` directory (if it doesn't exist), initialize the database, and add default favorite pairs if needed.
+
+### How to connect to and visualize the SQLite database
+- The database file is `instance/crypto.db` in the backend directory.
+
+#### Command Line:
+```bash
+sqlite3 instance/crypto.db
+```
+- Useful commands inside sqlite3:
+  - `.tables` — list tables
+  - `SELECT * FROM favorite_pair;` — view all favorite pairs
+
+#### GUI Tools:
+- [DB Browser for SQLite](https://sqlitebrowser.org/) (free, cross-platform)
+- TablePlus, DBeaver, or any SQLite-compatible tool
+- Open `instance/crypto.db` with your chosen tool to browse and edit data
+
+#### VS Code Extension:
+- Install the "SQLite" extension in VS Code
+- Open `instance/crypto.db` directly in the editor 
